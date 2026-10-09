@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cetak Label</title>
+  <link rel="stylesheet" href="/css/app.css">
+  <style id="page-style"></style>
+  <style>
+    body { background: #eee; }
+    .bar-top { padding: .7rem 1rem; background: var(--surface); display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+    .sheet { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; }
+    .page { break-after: page; page-break-after: always; }
+    @media print {
+      body { background: #fff; }
+      .bar-top { display: none; }
+      .sheet { display: block; padding: 0; }
+      .label-frame { box-shadow: none !important; margin: 0; break-inside: avoid; }
+      .page { margin: 0; }
+      .page:last-child { break-after: auto; page-break-after: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bar-top">
+    <button class="btn" id="go" type="button">Cetak</button>
+    <span id="info" class="muted small">Memuat label…</span>
+    <span class="muted small">Atur ukuran kertas di dialog cetak sesuai ukuran label, skala 100%, tanpa margin.</span>
+  </div>
+  <div class="sheet" id="sheet"></div>
+  <script type="module">
+    import { labelHtml } from '/js/label.js';
+    const q = new URLSearchParams(location.search);
+    const sheet = document.getElementById('sheet');
+    const info = document.getElementById('info');
+    try {
+      const url = q.get('test') ? '/api/print/labels-data?test=1' : `/api/print/labels-data?codes=${encodeURIComponent(q.get('codes') || '')}`;
+      const res = await fetch(url, { credentials: 'same-origin' });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Gagal memuat (${res.status})`);
+      const { config, labels } = await res.json();
+      const copies = Math.min(Math.max(parseInt(q.get('copies') || config.copies, 10) || 1, 1), 20);
+      document.getElementById('page-style').textContent =
+        `@media print { @page { size: ${config.label_width_mm}mm ${config.label_height_mm}mm; margin: 0 } }`;
+      const html = [];
+      for (const l of labels) for (let i = 0; i < copies; i++) html.push(`<div class="page">${labelHtml(config, l)}</div>`);
+      sheet.innerHTML = html.join('');
+      info.textContent = `${html.length} label (${config.label_width_mm}×${config.label_height_mm} mm)`;
+      const imgs = [...sheet.querySelectorAll('img')];
+      await Promise.all(imgs.map((im) => (im.complete ? 0 : new Promise((r) => { im.onload = im.onerror = r; }))));
+      document.getElementById('go').onclick = () => window.print();
+      if (!q.get('noauto')) setTimeout(() => window.print(), 250);
+    } catch (e) {
+      info.textContent = e.message;
+      info.style.color = '#b3261e';
+    }
+  </script>
+</body>
+</html>
