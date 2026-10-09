@@ -77,7 +77,40 @@ Yang sudah diatur untuk produksi: cookie sesi `Secure`, HSTS, `TRUST_PROXY` (IP 
 
 **Soal printer:** server di internet **tidak bisa** menjangkau printer di LAN gudang. Pakai mode **Browser / driver sistem** (cetak dari HP/PC di gudang yang tersambung ke printer) atau mode **Antrian sistem** di PC gudang. Mode *Jaringan (TCP 9100)* hanya bila server berada satu jaringan dengan printer.
 
-Tanpa Docker (server sendiri / mini-PC gudang): jalankan `npm start` dengan `COOKIE_SECURE=1`, dan letakkan di belakang reverse proxy HTTPS (set `TRUST_PROXY=loopback` bila proxy di mesin yang sama).
+### Tanpa Docker (Ubuntu/Debian)
+
+Cukup Node.js 22, MySQL/MariaDB, dan Caddy (atau Nginx). Contoh di Ubuntu:
+
+```bash
+# 1) Paket dasar
+sudo apt update && sudo apt install -y mysql-server git
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash - && sudo apt install -y nodejs
+sudo apt install -y caddy            # atau: nginx certbot python3-certbot-nginx
+
+# 2) Database
+sudo mysql -e "CREATE DATABASE delova_warehouse CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'delova'@'localhost' IDENTIFIED BY 'PASSWORD-KUAT';
+GRANT ALL ON delova_warehouse.* TO 'delova'@'localhost';"
+
+# 3) Aplikasi
+sudo useradd -r -m -d /opt/dlv-warehouse -s /usr/sbin/nologin delova
+sudo git clone https://github.com/Rzzkan/dlv-warehouse /opt/dlv-warehouse
+cd /opt/dlv-warehouse && sudo npm ci --omit=dev
+sudo cp .env.native.example .env && sudo nano .env          # isi password
+sudo chown -R delova:delova /opt/dlv-warehouse && sudo chmod 600 .env
+
+# 4) Jalan otomatis (systemd)
+sudo cp deploy/dlv-warehouse.service /etc/systemd/system/
+sudo systemctl enable --now dlv-warehouse && sudo journalctl -u dlv-warehouse -f
+
+# 5) HTTPS: Caddy (sertifikat otomatis)
+sudo cp deploy/Caddyfile.native /etc/caddy/Caddyfile && sudo systemctl reload caddy
+#    (Nginx: pakai deploy/nginx-wh.delova.id.conf lalu `sudo certbot --nginx -d wh.delova.id`)
+```
+
+Backup harian: `30 1 * * * /opt/dlv-warehouse/scripts/backup-native.sh` (di crontab user `delova`). Update versi: `cd /opt/dlv-warehouse && sudo -u delova git pull && sudo npm ci --omit=dev && sudo systemctl restart dlv-warehouse`.
+
+**Hosting bersama (cPanel/Niagahoster dsb.):** bisa bila ada fitur *Setup Node.js App* dengan **Node 22** dan database MySQL. Isi variabel `.env` lewat panel, arahkan startup file ke `server/index.js`, dan aktifkan HTTPS/SSL untuk subdomain. Bila hanya tersedia Node < 22 atau tanpa Node, pakai VPS.
 
 ## Struktur
 
