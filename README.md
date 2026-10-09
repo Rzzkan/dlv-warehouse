@@ -50,9 +50,34 @@ Bahasa printer: **TSPL** (TSC, Xprinter, Gprinter, Argox, dll.) atau **ZPL** (Ze
 
 > **Catatan jujur tentang pengujian:** perintah TSPL/ZPL, pengiriman TCP, dan halaman cetak diuji otomatis (termasuk printer TCP tiruan dan Chromium headless), tetapi **belum diuji dengan perangkat printer fisik**. Cetak satu label tes dulu, lalu sesuaikan ukuran, gap, dan kegelapan. Mode "Antrian sistem" khususnya bergantung pada konfigurasi OS Anda.
 
-## Deployment
+## Deployment (wh.delova.id)
 
-Pasang di komputer/mini-PC di gudang yang satu jaringan dengan printer (mode jaringan). Bila diakses lewat HTTPS (disarankan untuk scan kamera), set `COOKIE_SECURE=1` dan letakkan di belakang reverse proxy. Server di cloud **tidak** bisa menjangkau printer di LAN — pakai mode Browser, atau jalankan server di gudang.
+Paket produksi: aplikasi + MySQL + Caddy (HTTPS otomatis dari Let's Encrypt), semuanya lewat Docker. MySQL tidak dibuka ke internet.
+
+**Kebutuhan:** VPS Linux (1 vCPU / 1–2 GB RAM cukup) dengan Docker + Docker Compose, port 80 & 443 terbuka.
+
+1. **DNS:** buat record `A` untuk `wh.delova.id` → IP VPS. (Bila memakai Cloudflare: mode SSL/TLS "Full (strict)".)
+2. **Ambil kode & isi password:**
+   ```bash
+   git clone https://github.com/Rzzkan/dlv-warehouse && cd dlv-warehouse
+   cp .env.production.example .env && nano .env      # GANTI semua password
+   ```
+3. **Jalankan:**
+   ```bash
+   docker compose -f docker-compose.prod.yml up -d --build
+   docker compose -f docker-compose.prod.yml logs -f app    # pastikan "Delova Warehouse berjalan"
+   ```
+   Buka https://wh.delova.id, login dengan `ADMIN_USERNAME`/`ADMIN_PASSWORD`, lalu **ganti password** di Admin.
+4. **Backup harian** (termasuk foto roll): `crontab -e` lalu tambah
+   `30 1 * * * /path/ke/dlv-warehouse/scripts/backup.sh >> /var/log/delova-backup.log 2>&1`.
+   Backup tersimpan di `backups/` (14 hari). Pulihkan dengan `scripts/restore.sh backups/<file>.sql.gz`. Salin folder `backups/` ke tempat lain (mis. Google Drive) secara berkala.
+5. **Update versi baru:** `git pull && docker compose -f docker-compose.prod.yml up -d --build`.
+
+Yang sudah diatur untuk produksi: cookie sesi `Secure`, HSTS, `TRUST_PROXY` (IP pengunjung asli terbaca di belakang Caddy sehingga pembatas login adil), header keamanan, kamera hanya untuk situs sendiri, dan DB hanya bisa diakses dari jaringan internal Docker.
+
+**Soal printer:** server di internet **tidak bisa** menjangkau printer di LAN gudang. Pakai mode **Browser / driver sistem** (cetak dari HP/PC di gudang yang tersambung ke printer) atau mode **Antrian sistem** di PC gudang. Mode *Jaringan (TCP 9100)* hanya bila server berada satu jaringan dengan printer.
+
+Tanpa Docker (server sendiri / mini-PC gudang): jalankan `npm start` dengan `COOKIE_SECURE=1`, dan letakkan di belakang reverse proxy HTTPS (set `TRUST_PROXY=loopback` bila proxy di mesin yang sama).
 
 ## Struktur
 

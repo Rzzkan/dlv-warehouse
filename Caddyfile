@@ -1,0 +1,10 @@
+# HTTPS otomatis (Let's Encrypt) untuk wh.delova.id. Pastikan DNS A record wh.delova.id -> IP server ini
+# dan port 80 + 443 terbuka di firewall.
+{$APP_DOMAIN:wh.delova.id} {
+	encode zstd gzip
+	reverse_proxy app:3000
+	header Strict-Transport-Security "max-age=31536000"
+	request_body {
+		max_size 5MB
+	}
+}

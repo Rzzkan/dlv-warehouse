@@ -1,0 +1,64 @@
+# Produksi: aplikasi + MySQL + Caddy (HTTPS otomatis).
+#   cp .env.production.example .env   (isi password!)
+#   docker compose -f docker-compose.prod.yml up -d --build
+# MySQL TIDAK dibuka ke internet (hanya jaringan internal Docker).
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?isi DB_ROOT_PASSWORD di .env}
+      MYSQL_DATABASE: ${DB_NAME:-delova_warehouse}
+      MYSQL_USER: ${DB_USER:-delova}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?isi DB_PASSWORD di .env}
+      TZ: UTC
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--max_allowed_packet=16M"]
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: "3000"
+      HOST: 0.0.0.0
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_USER: ${DB_USER:-delova}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-delova_warehouse}
+      DB_AUTO_CREATE: "0"
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      TZ_OFFSET_MINUTES: ${TZ_OFFSET_MINUTES:-420}
+      COOKIE_SECURE: "1"
+      TRUST_PROXY: uniquelocal   # Caddy ada di jaringan Docker (alamat privat)
+      SESSION_DAYS: ${SESSION_DAYS:-14}
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:-wh.delova.id}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  mysql_data:
+  caddy_data:
+  caddy_config:

@@ -17,6 +17,8 @@ export function loadConfig(env = process.env) {
     adminUsername: env.ADMIN_USERNAME || 'admin',
     adminPassword: env.ADMIN_PASSWORD || '',
     cookieSecure: env.COOKIE_SECURE === '1',
+    // Proxy mana yang dipercaya untuk header X-Forwarded-*. Nilai Express: 'loopback', 'uniquelocal' (jaringan Docker), jumlah hop, atau daftar IP. Penting agar IP asli pengunjung terbaca (pembatas login).
+    trustProxy: env.TRUST_PROXY || 'loopback',
     sessionDays: Number(env.SESSION_DAYS) || 14,
   };
 }

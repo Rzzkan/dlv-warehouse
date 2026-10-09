@@ -13,7 +13,15 @@ const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 
 export function createApp({ db, config }) {
   const app = express();
   app.disable('x-powered-by');
-  app.set('trust proxy', 'loopback');
+  const tp = String(config.trustProxy ?? 'loopback');
+  app.set('trust proxy', /^\d+$/.test(tp) ? Number(tp) : tp === 'true' ? true : tp === 'false' ? false : tp);
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'same-origin');
+    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()'); // kamera dipakai untuk foto roll & scan
+    next();
+  });
   // Unggah foto roll membawa gambar base64 (hasil kompres dari browser) -> batas lebih besar hanya untuk rute ini
   app.use('/api/rolls/:code/photo', express.json({ limit: '4mb' }));
   app.use(express.json({ limit: '1mb' }));

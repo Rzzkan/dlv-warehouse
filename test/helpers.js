@@ -14,12 +14,12 @@ const conn = () => ({
 });
 
 /** Jalankan app dengan database MySQL sementara di port acak; kembalikan klien HTTP sederhana dengan cookie. */
-export async function startTestServer() {
+export async function startTestServer(extraEnv = {}) {
   const c = conn();
   const dbName = `delova_test_${process.pid}_${Math.random().toString(36).slice(2, 8)}`;
   const config = loadConfig({
     DB_HOST: c.host, DB_PORT: String(c.port), DB_USER: c.user, DB_PASSWORD: c.password, DB_NAME: dbName,
-    ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'rahasia123', TZ_OFFSET_MINUTES: '420',
+    ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'rahasia123', TZ_OFFSET_MINUTES: '420', ...extraEnv,
   });
   let db;
   try {
