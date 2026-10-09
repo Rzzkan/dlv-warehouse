@@ -86,6 +86,17 @@ const SCHEMA = [
     CONSTRAINT fk_rolls_receipt  FOREIGN KEY (receipt_id)  REFERENCES receipts(id)
   ) ${TABLE_OPTS}`,
 
+  // Foto roll (diambil dari kamera saat barang masuk). Disimpan di database agar ikut ter-backup mysqldump.
+  `CREATE TABLE IF NOT EXISTS roll_photos (
+    roll_id    INT UNSIGNED NOT NULL PRIMARY KEY,
+    mime       VARCHAR(20)  NOT NULL,
+    size_bytes INT UNSIGNED NOT NULL,
+    data       MEDIUMBLOB   NOT NULL,
+    user_id    INT UNSIGNED NULL,
+    updated_at DATETIME(3)  NOT NULL,
+    CONSTRAINT fk_roll_photos_roll FOREIGN KEY (roll_id) REFERENCES rolls(id) ON DELETE CASCADE
+  ) ${TABLE_OPTS}`,
+
   // Buku mutasi: setiap perubahan yard dicatat (delta + / -)
   `CREATE TABLE IF NOT EXISTS movements (
     id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,

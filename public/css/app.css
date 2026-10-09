@@ -161,3 +161,12 @@ pre.cmd { background: #11181a; color: #cfe8e1; padding: .8rem; border-radius: 8p
 .label-frame .lb-info { font-size: 10pt; font-weight: 700; display: flex; gap: 3mm; white-space: nowrap; }
 .label-frame .lb-sup { font-size: 6pt; white-space: nowrap; overflow: hidden; }
 .preview-stage { background: repeating-conic-gradient(#e9e4d9 0 25%, #f4f0e7 0 50%) 0 0 / 16px 16px; border-radius: 10px; padding: 1rem; overflow: auto; display: grid; place-items: center; min-height: 160px; }
+
+/* Foto roll */
+.photo-btns { display: inline-flex; gap: .3rem; }
+.photo-btns .btn { cursor: pointer; }
+.thumb { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line, #d8d2c4); cursor: zoom-in; vertical-align: middle; background: #eee; }
+.thumb.lg { width: 100%; max-width: 360px; height: auto; max-height: 360px; border-radius: 10px; }
+.photo-cell { display: flex; align-items: center; gap: .4rem; min-width: 130px; }
+.photo-cell .ph-state { font-size: .75rem; }
+@media (max-width: 640px) { .photo-cell { min-width: 0; } .photo-btns .btn { padding: .4rem .55rem; } }

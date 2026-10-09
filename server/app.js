@@ -14,6 +14,8 @@ export function createApp({ db, config }) {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 'loopback');
+  // Unggah foto roll membawa gambar base64 (hasil kompres dari browser) -> batas lebih besar hanya untuk rute ini
+  app.use('/api/rolls/:code/photo', express.json({ limit: '4mb' }));
   app.use(express.json({ limit: '1mb' }));
 
   app.use('/api', (req, res, next) => {
@@ -39,6 +41,7 @@ export function createApp({ db, config }) {
   // eslint-disable-next-line no-unused-vars
   app.use((err, _req, res, _next) => {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    if (err?.type === 'entity.too.large') return res.status(413).json({ error: 'Data terlalu besar' });
     if (err?.type === 'entity.parse.failed') return res.status(400).json({ error: 'JSON tidak valid' });
     if (err?.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Data sudah ada (duplikat)' });
     if (err?.code === 'ER_DATA_TOO_LONG') return res.status(400).json({ error: 'Salah satu isian terlalu panjang' });

@@ -5,6 +5,7 @@ Sistem pergudangan kain roll untuk Delova Wardrobe: pencatatan **barang masuk / 
 ## Fitur
 
 - **Barang masuk**: satu dokumen penerimaan (supplier, no. surat jalan) → banyak roll. Tiap roll otomatis mendapat kode unik `DLV` + `YYMMDD` + urut 4 digit (mis. `DLV2610090001`, Code 128). Ada input cepat (Enter = baris baru) dan "tambah banyak roll sekaligus".
+- **Foto roll dari kamera**: tiap baris barang masuk punya tombol 📷 (membuka kamera HP; di komputer membuka pemilih file) dan 🖼 (galeri). Foto otomatis diperkecil di browser (maks 1280 px, JPEG ±100–300 KB) lalu disimpan di database, sehingga ikut ter-backup `mysqldump`. Foto bisa ditambah/diganti belakangan di halaman Lacak (hapus: admin). Roll yang berfoto ditandai 📷 di daftar Stok. Kamera HP butuh HTTPS (atau localhost).
 - **Barang keluar**: scan barcode → isi yard yang diambil. **Bisa sebagian roll**; sisa tercatat otomatis, roll yang sisanya 0 berstatus *Habis*. Satu dokumen bisa banyak roll, dan bersifat atomik (satu baris gagal = tidak ada yang berubah).
 - **Lacak**: scan/ketik kode → sisa yard, lokasi, supplier, dan seluruh riwayat pergerakan. Ada penyesuaian stok (opname) berikut alasan, dan void (admin).
 - **Stok, Riwayat mutasi (+ ekspor CSV), Jenis kain (stok minimum + peringatan), Pengguna (admin/staf).**

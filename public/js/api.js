@@ -33,6 +33,7 @@ export async function api(method, url, body) {
 export const get = (url) => api('GET', url);
 export const post = (url, body = {}) => api('POST', url, body);
 export const put = (url, body = {}) => api('PUT', url, body);
+export const del = (url) => api('DELETE', url, {});
 export const patch = (url, body = {}) => api('PATCH', url, body);
 
 export const qs = (params) => {

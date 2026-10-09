@@ -5,6 +5,7 @@ import {
   receiveRolls, issueRolls, adjustRoll, voidRoll, updateRollInfo,
   listRolls, getRollDetail, listMovements, dashboard,
 } from '../services/inventory.js';
+import { setRollPhoto, getRollPhoto, deleteRollPhoto } from '../services/photos.js';
 
 const csvCell = (v) => {
   const s = v instanceof Date ? v.toISOString() : String(v ?? '');
@@ -51,6 +52,16 @@ export function stockRoutes({ db, config }) {
   r.patch('/rolls/:code', asyncHandler(async (req, res) => res.json({ roll: await updateRollInfo(db, req.params.code, req.body || {}) })));
   r.post('/rolls/:code/adjust', asyncHandler(async (req, res) => res.json({ roll: await adjustRoll(db, req.user, req.params.code, req.body || {}) })));
   r.post('/rolls/:code/void', requireAdmin, asyncHandler(async (req, res) => res.json({ roll: await voidRoll(db, req.user, req.params.code, req.body || {}) })));
+
+  // Foto roll (kamera)
+  r.put('/rolls/:code/photo', asyncHandler(async (req, res) => res.json(await setRollPhoto(db, req.user, req.params.code, req.body?.image))));
+  r.get('/rolls/:code/photo', asyncHandler(async (req, res) => {
+    const photo = await getRollPhoto(db, req.params.code);
+    res.setHeader('Content-Type', photo.mime);
+    res.setHeader('Cache-Control', 'private, max-age=3600'); // URL memakai ?v=<waktu foto> sehingga foto baru langsung terlihat
+    res.send(photo.data);
+  }));
+  r.delete('/rolls/:code/photo', requireAdmin, asyncHandler(async (req, res) => res.json(await deleteRollPhoto(db, req.params.code))));
 
   // Riwayat mutasi
   r.get('/movements', asyncHandler(async (req, res) => res.json(await listMovements(db, config, req.query))));

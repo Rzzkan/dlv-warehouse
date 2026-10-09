@@ -32,7 +32,7 @@ export default async function stok(view) {
       const pct = r.initial_yards ? Math.max(0, Math.min(100, (r.current_yards / r.initial_yards) * 100)) : 0;
       return `<tr class="click" data-code="${esc(r.code)}">
         <td><input type="checkbox" data-sel="${esc(r.code)}" ${state.selected.has(r.code) ? 'checked' : ''} aria-label="Pilih ${esc(r.code)}"></td>
-        <td class="mono small">${esc(r.code)}</td><td>${esc(materialName(r))}</td>
+        <td class="mono small">${esc(r.code)}${r.photo_at ? ' <span title="Ada foto">📷</span>' : ''}</td><td>${esc(materialName(r))}</td>
         <td class="num"><strong>${fmtYd(r.current_yards)}</strong> <span class="muted">/ ${fmtYd(r.initial_yards)}</span><div class="bar"><i style="width:${pct}%"></i></div></td>
         <td>${esc(r.location)}</td><td>${esc(r.lot)}</td><td class="small nowrap">${esc(fmtDate(r.received_at || r.created_at))}</td><td>${statusBadge(r.status)}</td></tr>`;
     }).join('');

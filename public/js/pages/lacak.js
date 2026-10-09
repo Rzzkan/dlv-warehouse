@@ -1,9 +1,10 @@
-import { get, post, patch } from '../api.js';
+import { get, post, patch, del } from '../api.js';
 import {
   $, esc, fmtYd, fmtM, fmtDate, fmtDateTime, statusBadge, typeBadge, toast, openModal,
   scanWithCamera, CAM_SUPPORTED,
 } from '../ui.js';
 import { printLabels } from '../label.js';
+import { compressImage, uploadRollPhoto, photoUrl, photoButtons, showPhoto } from '../photo.js';
 
 export default async function lacak(view, ctx) {
   view.innerHTML = `
@@ -61,6 +62,14 @@ export default async function lacak(view, ctx) {
             <p style="margin:.8rem 0 .2rem"><strong style="font-size:1.4rem">${fmtYd(roll.current_yards)} yd</strong>
               <span class="muted"> dari ${fmtYd(roll.initial_yards)} yd · ${fmtM(roll.current_yards)} m</span></p>
             <div class="bar" style="max-width:360px"><i style="width:${pct}%"></i></div>
+            <div style="margin-top:1rem">
+              ${roll.photo_at
+                ? `<img class="thumb lg" id="roll-photo" alt="Foto roll ${esc(roll.code)}" src="${photoUrl(roll.code, roll.photo_at)}">`
+                : '<p class="muted small" style="margin:0 0 .4rem">Belum ada foto roll.</p>'}
+              <div class="btn-row" style="margin-top:.4rem">${photoButtons('roll')}
+                <span class="muted small">${roll.photo_at ? 'Ganti foto' : 'Tambah foto'}</span>
+                ${isAdmin && roll.photo_at ? '<button class="btn secondary sm" id="del-photo">Hapus foto</button>' : ''}</div>
+            </div>
           </div>
           <dl class="kv">
             <div><dt>Kain</dt><dd>${esc(roll.material_name)}</dd></div>
@@ -89,6 +98,28 @@ export default async function lacak(view, ctx) {
       try {
         const res = await printLabels([roll.code]);
         if (res.mode !== 'browser') toast('Label dikirim ke printer', 'ok');
+      } catch (err) {
+        toast(err.message, 'err');
+      }
+    });
+    $('#roll-photo', out)?.addEventListener('click', (e) => showPhoto(e.target.src, `Foto ${roll.code}`));
+    out.onchange = async (e) => {
+      const inp = e.target.closest('[data-photo-in]');
+      if (!inp?.files?.[0]) return;
+      try {
+        toast('Mengunggah foto…');
+        await uploadRollPhoto(roll.code, await compressImage(inp.files[0]));
+        toast('Foto tersimpan', 'ok');
+        await reload();
+      } catch (err) {
+        toast(err.message, 'err');
+      }
+    };
+    $('#del-photo', out)?.addEventListener('click', async () => {
+      try {
+        await del(`/api/rolls/${encodeURIComponent(roll.code)}/photo`);
+        toast('Foto dihapus', 'ok');
+        await reload();
       } catch (err) {
         toast(err.message, 'err');
       }

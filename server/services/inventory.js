@@ -26,7 +26,8 @@ async function nextDocNo(db, prefix, day) {
 const ROLL_SELECT = `
   SELECT r.*, m.code AS material_code, m.name AS material_name, m.color AS material_color,
          m.width_cm AS material_width_cm,
-         rc.receipt_no, rc.supplier, rc.ref_doc, rc.received_at
+         rc.receipt_no, rc.supplier, rc.ref_doc, rc.received_at,
+         (SELECT p.updated_at FROM roll_photos p WHERE p.roll_id = r.id) AS photo_at
     FROM rolls r
     JOIN materials m ON m.id = r.material_id
     LEFT JOIN receipts rc ON rc.id = r.receipt_id`;
