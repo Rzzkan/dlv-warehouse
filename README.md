@@ -10,6 +10,7 @@ Sistem pergudangan kain roll untuk Delova Wardrobe: pencatatan **barang masuk / 
 - **Lacak**: scan/ketik kode → sisa yard, lokasi, supplier, dan seluruh riwayat pergerakan. Ada penyesuaian stok (opname) berikut alasan, dan void (admin).
 - **Stok, Riwayat mutasi (+ ekspor CSV), Jenis kain (stok minimum + peringatan), Pengguna (admin/staf).**
 - **Scan**: scanner USB/Bluetooth (bekerja sebagai keyboard, akhiri dengan Enter) atau kamera HP (Chrome Android; butuh HTTPS/localhost).
+- **Ramah HP & tablet**: di HP, menu pindah ke bar bawah (Beranda, Masuk, Keluar, Stok, Lacak, + "Lainnya"), tabel otomatis jadi kartu, tombol ≥44 px, font input 16 px (iPhone tidak zoom saat mengetik), dan mendukung area aman (notch). Tablet memakai tata letak lebar. Sudah diuji di 360/390 px (HP) dan 768/1024 px (tablet).
 - Satuan **yard**, dengan konversi meter ditampilkan.
 
 ## Menjalankan

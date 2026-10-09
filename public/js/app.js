@@ -1,15 +1,16 @@
 import { get, post } from './api.js';
 import { $, esc, toast } from './ui.js';
 
+// short = label ringkas untuk menu bawah di HP; more = masuk menu "Lainnya" di HP
 const PAGES = [
-  { id: '', label: 'Beranda', load: () => import('./pages/dashboard.js') },
-  { id: 'masuk', label: 'Barang Masuk', load: () => import('./pages/masuk.js') },
-  { id: 'keluar', label: 'Barang Keluar', load: () => import('./pages/keluar.js') },
-  { id: 'stok', label: 'Stok', load: () => import('./pages/stok.js') },
-  { id: 'lacak', label: 'Lacak', load: () => import('./pages/lacak.js') },
-  { id: 'kain', label: 'Jenis Kain', load: () => import('./pages/kain.js') },
-  { id: 'riwayat', label: 'Riwayat', load: () => import('./pages/riwayat.js') },
-  { id: 'admin', label: 'Admin', load: () => import('./pages/admin.js'), adminOnly: true },
+  { id: '', label: 'Beranda', short: 'Beranda', icon: '🏠', load: () => import('./pages/dashboard.js') },
+  { id: 'masuk', label: 'Barang Masuk', short: 'Masuk', icon: '📥', load: () => import('./pages/masuk.js') },
+  { id: 'keluar', label: 'Barang Keluar', short: 'Keluar', icon: '📤', load: () => import('./pages/keluar.js') },
+  { id: 'stok', label: 'Stok', short: 'Stok', icon: '📦', load: () => import('./pages/stok.js') },
+  { id: 'lacak', label: 'Lacak', short: 'Lacak', icon: '🔎', load: () => import('./pages/lacak.js') },
+  { id: 'kain', label: 'Jenis Kain', short: 'Kain', icon: '🧵', more: true, load: () => import('./pages/kain.js') },
+  { id: 'riwayat', label: 'Riwayat', short: 'Riwayat', icon: '🕘', more: true, load: () => import('./pages/riwayat.js') },
+  { id: 'admin', label: 'Admin', short: 'Admin', icon: '⚙️', more: true, adminOnly: true, load: () => import('./pages/admin.js') },
 ];
 
 const ctx = { user: null };
@@ -23,9 +24,45 @@ function parseHash() {
 
 function renderNav() {
   const { id } = parseHash();
-  $('#nav').innerHTML = PAGES.filter((p) => !p.adminOnly || ctx.user.role === 'admin')
-    .map((p) => `<a href="#/${p.id}" class="${p.id === id ? 'active' : ''}">${esc(p.label)}</a>`)
-    .join('');
+  const pages = PAGES.filter((p) => !p.adminOnly || ctx.user.role === 'admin');
+  const link = (p, extra = '') => `<a href="#/${p.id}" class="${p.id === id ? 'active' : ''} ${extra}"><i class="ni" aria-hidden="true">${p.icon}</i><span>${esc(p.label)}</span></a>`;
+  const more = pages.filter((p) => p.more);
+  // Layar lebar: semua menu di bar atas. HP (CSS): bar bawah berisi menu utama + tombol "Lainnya" yang membuka menu sisanya.
+  $('#nav').innerHTML = `${pages.map((p) => link(p, p.more ? 'secondary' : '')).join('')}
+    <button type="button" class="more-btn ${more.some((p) => p.id === id) ? 'active' : ''}" id="more-btn" aria-expanded="false" aria-controls="more-sheet"><i class="ni" aria-hidden="true">⋯</i><span>Lainnya</span></button>
+    <div class="more-sheet" id="more-sheet" hidden>${more.map((p) => link(p)).join('')}</div>`;
+}
+
+// Menu "Lainnya" (HP): buka/tutup, tutup saat memilih menu atau mengetuk di luar
+document.addEventListener('click', (e) => {
+  const sheet = $('#more-sheet');
+  if (!sheet) return;
+  const btn = e.target.closest('#more-btn');
+  const open = btn ? sheet.hidden : false;
+  sheet.hidden = !open;
+  $('#more-btn')?.setAttribute('aria-expanded', String(open));
+});
+
+// Tabel dijadikan kartu di layar sempit (CSS): isi data-label tiap sel dari judul kolomnya
+function labelTables(view) {
+  for (const table of view.querySelectorAll('table')) {
+    if (table.dataset.nostack !== undefined) continue;
+    table.classList.add('stack');
+    const heads = [...(table.tHead?.rows[0]?.cells || [])].map((c) => c.textContent.trim());
+    for (const row of table.tBodies[0]?.rows || []) {
+      const cells = [...row.cells];
+      const full = cells.length !== heads.length; // mis. baris "Tidak ada data" dengan colspan
+      cells.forEach((c, i) => {
+        const label = full ? '' : heads[i] || '';
+        if (c.dataset.label !== label) c.dataset.label = label;
+      });
+    }
+  }
+}
+function watchTables(view) {
+  let queued = false;
+  const run = () => { queued = false; labelTables(view); };
+  new MutationObserver(() => { if (!queued) { queued = true; requestAnimationFrame(run); } }).observe(view, { childList: true, subtree: true });
 }
 
 async function route() {
@@ -41,6 +78,7 @@ async function route() {
   const old = $('#view');
   const view = old.cloneNode(false);
   old.replaceWith(view);
+  watchTables(view);
   const token = ++renderToken;
   view.innerHTML = '<p class="muted">Memuat…</p>';
   try {

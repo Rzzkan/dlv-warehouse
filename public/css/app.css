@@ -95,7 +95,8 @@ table { width: 100%; border-collapse: collapse; font-size: .92rem; }
 th, td { text-align: left; padding: .5rem .55rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
 th { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); white-space: nowrap; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-tr.click { cursor: pointer; } tr.click:hover td { background: var(--brand-soft); }
+tr.click { cursor: pointer; }
+@media (hover: hover) and (pointer: fine) { tr.click:hover td { background: var(--brand-soft); } }
 td input { min-height: 36px; padding: .3rem .45rem; }
 .empty { text-align: center; color: var(--muted); padding: 2rem 1rem; }
 
@@ -170,3 +171,91 @@ pre.cmd { background: #11181a; color: #cfe8e1; padding: .8rem; border-radius: 8p
 .photo-cell { display: flex; align-items: center; gap: .4rem; min-width: 130px; }
 .photo-cell .ph-state { font-size: .75rem; }
 @media (max-width: 640px) { .photo-cell { min-width: 0; } .photo-btns .btn { padding: .4rem .55rem; } }
+
+/* ===== Ramah HP & tablet ===== */
+html { -webkit-text-size-adjust: 100%; }
+a, button, label.btn, select, input, summary { touch-action: manipulation; }
+.ni, .more-btn, .more-sheet { display: none; }   /* ikon & menu "Lainnya" hanya untuk HP */
+.nav a .ni { display: none; }
+
+/* Perangkat sentuh (HP & tablet, termasuk landscape): target sentuh >= 44px, font input 16px agar iOS tidak zoom */
+@media (pointer: coarse) {
+  input, select, textarea { font-size: 16px; min-height: 44px; }
+  td input, td select { min-height: 44px; }
+  .btn { min-height: 44px; }
+  .btn.sm { min-height: 44px; padding: .35rem .8rem; }
+  .nav a { min-height: 44px; display: inline-flex; align-items: center; }
+  .brand { min-height: 44px; display: inline-flex; align-items: center; }
+  .tabs button { min-height: 44px; }
+  input[type=checkbox] { width: 22px; height: 22px; min-height: 0; accent-color: var(--brand); }
+  .check { min-height: 44px; }
+  .photo-btns .btn { min-width: 44px; justify-content: center; }
+  .thumb { width: 52px; height: 52px; }
+}
+
+/* Tablet portrait */
+@media (min-width: 721px) and (max-width: 900px) {
+  .view { padding-left: .8rem; padding-right: .8rem; }
+  .grid.cols-2 { grid-template-columns: 1fr; }
+}
+
+/* HP */
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  h1 { font-size: 1.3rem; }
+  .topbar { flex-wrap: nowrap; padding: .4rem .8rem; padding-top: calc(.4rem + env(safe-area-inset-top)); justify-content: space-between; }
+  .user { margin-left: auto; }
+  .view { padding: .8rem .8rem calc(6rem + env(safe-area-inset-bottom)); }
+  .card { padding: .85rem; }
+  .page-head { align-items: stretch; }
+  .page-head .btn-row { width: 100%; }
+  .page-head .btn-row .btn { flex: 1 1 auto; justify-content: center; }
+  .btn-row > .btn { flex: 1 1 auto; justify-content: center; }
+  .scan-box .btn { flex: none; }
+  .modal-bg { align-items: end; padding: 0; }
+  .modal { width: 100%; max-height: 92vh; border-radius: 16px 16px 0 0; padding-bottom: calc(1.1rem + env(safe-area-inset-bottom)); }
+  .modal .actions .btn { flex: 1 1 auto; justify-content: center; }
+  .toasts { bottom: calc(4.8rem + env(safe-area-inset-bottom)); }
+
+  /* Menu bawah ala aplikasi */
+  .nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; order: 0; flex-basis: auto; overflow: visible;
+         display: grid; grid-template-columns: repeat(6, 1fr); gap: 0; padding: .2rem .2rem calc(.2rem + env(safe-area-inset-bottom));
+         background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgba(0,0,0,.08); }
+  .nav > a.secondary { display: none; }
+  .nav > a, .nav > .more-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .1rem; min-height: 56px;
+         padding: .25rem 0; border-radius: 10px; color: var(--muted); font-size: .68rem; opacity: 1; background: none; border: 0; font-family: inherit; cursor: pointer; text-align: center; white-space: nowrap; }
+  .nav > a .ni, .nav > .more-btn .ni { display: block; font-style: normal; font-size: 1.35rem; line-height: 1; }
+  .nav > a span, .nav > .more-btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .nav > a.active, .nav > .more-btn.active { color: var(--brand); background: var(--brand-soft); font-weight: 700; }
+  .nav > a:hover { background: none; }
+  .nav > a.active:hover { background: var(--brand-soft); }
+  /* tampilkan nama ringkas */
+  .nav > a[href="#/masuk"] span, .nav > a[href="#/keluar"] span { font-size: 0; }
+  .nav > a[href="#/masuk"] span::after { content: 'Masuk'; font-size: .68rem; }
+  .nav > a[href="#/keluar"] span::after { content: 'Keluar'; font-size: .68rem; }
+  .more-sheet { display: block; position: absolute; right: .5rem; bottom: calc(100% + .5rem); min-width: 190px; background: var(--surface); border: 1px solid var(--line);
+                border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.25); padding: .3rem; }
+  .more-sheet[hidden] { display: none; }
+  .more-sheet a { display: flex; align-items: center; gap: .6rem; min-height: 48px; padding: .4rem .8rem; border-radius: 10px; color: var(--ink); text-decoration: none; font-size: 1rem; }
+  .more-sheet a.active { background: var(--brand-soft); color: var(--brand); font-weight: 700; }
+  .more-btn { display: flex; }
+  .more-sheet a .ni { display: inline; font-size: 1.2rem; font-style: normal; }
+
+  /* Tabel -> kartu */
+  .table-wrap { overflow: visible; }
+  table.stack, table.stack tbody, table.stack tr, table.stack td { display: block; width: 100%; }
+  table.stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  table.stack tr { border: 1px solid var(--line); border-radius: 12px; margin: 0 0 .7rem; padding: .25rem .8rem; background: var(--surface); box-shadow: var(--shadow); }
+  /* label di kiri lewat posisi absolut: isi sel yang berisi banyak elemen tetap mengalir normal */
+  table.stack td { display: block; position: relative; min-height: 2.6rem; padding: .55rem 0 .55rem 38%; border: 0; border-bottom: 1px dashed var(--line); text-align: left; overflow-wrap: anywhere; }
+  table.stack td:last-child { border-bottom: 0; }
+  table.stack td::before { content: attr(data-label); position: absolute; left: 0; top: .7rem; width: 34%; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); line-height: 1.3; overflow-wrap: normal; }
+  table.stack td[data-label=""] { padding-left: 0; min-height: 0; }
+  table.stack td[data-label=""]::before { display: none; }
+  table.stack td.num { text-align: left; }
+  table.stack td .btn-row, table.stack td.nowrap { white-space: normal; }
+  table.stack tr.click:active { background: var(--brand-soft); }
+  table.stack td .bar { min-width: 0; }
+  .label-frame { max-width: 100%; }
+}
+@media (max-width: 380px) { .nav > a, .nav > .more-btn { font-size: .62rem; } .nav > a .ni, .nav > .more-btn .ni { font-size: 1.2rem; } }
