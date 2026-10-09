@@ -7,7 +7,7 @@ import {
 } from '../services/inventory.js';
 
 const csvCell = (v) => {
-  const s = String(v ?? '');
+  const s = v instanceof Date ? v.toISOString() : String(v ?? '');
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
@@ -15,47 +15,48 @@ export function stockRoutes({ db, config }) {
   const r = Router();
   r.use(requireAuth);
 
-  r.get('/dashboard', (_req, res) => res.json(dashboard(db, config)));
+  r.get('/dashboard', asyncHandler(async (_req, res) => res.json(await dashboard(db, config))));
 
   // Barang masuk
   r.post('/receipts', asyncHandler(async (req, res) => {
-    res.status(201).json(receiveRolls(db, req.user, config, req.body || {}));
+    res.status(201).json(await receiveRolls(db, req.user, config, req.body || {}));
   }));
 
-  r.get('/receipts', (req, res) => {
-    const limit = Math.min(Number(req.query.limit) || 30, 200);
-    const rows = db
-      .prepare(
-        `SELECT rc.*, u.name AS user_name, COUNT(r.id) AS roll_count, COALESCE(SUM(r.initial_yards),0) AS total_yards
-           FROM receipts rc LEFT JOIN users u ON u.id = rc.user_id LEFT JOIN rolls r ON r.receipt_id = rc.id
-          GROUP BY rc.id ORDER BY rc.id DESC LIMIT ?`,
-      )
-      .all(limit);
+  r.get('/receipts', asyncHandler(async (req, res) => {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 200);
+    const rows = await db.all(
+      `SELECT rc.*, u.name AS user_name,
+              (SELECT COUNT(*) FROM rolls r WHERE r.receipt_id = rc.id) AS roll_count,
+              (SELECT COALESCE(SUM(r.initial_yards),0) FROM rolls r WHERE r.receipt_id = rc.id) AS total_yards
+         FROM receipts rc LEFT JOIN users u ON u.id = rc.user_id
+        ORDER BY rc.id DESC LIMIT ?`,
+      [limit],
+    );
     res.json({ rows });
-  });
+  }));
 
-  r.get('/receipts/:id/rolls', (req, res) => {
-    const rows = db.prepare('SELECT code FROM rolls WHERE receipt_id = ? ORDER BY id').all(Number(req.params.id));
+  r.get('/receipts/:id/rolls', asyncHandler(async (req, res) => {
+    const rows = await db.all('SELECT code FROM rolls WHERE receipt_id = ? ORDER BY id', [Number(req.params.id)]);
     res.json({ codes: rows.map((x) => x.code) });
-  });
+  }));
 
   // Barang keluar
   r.post('/outbound', asyncHandler(async (req, res) => {
-    res.status(201).json(issueRolls(db, req.user, config, req.body || {}));
+    res.status(201).json(await issueRolls(db, req.user, config, req.body || {}));
   }));
 
   // Roll
-  r.get('/rolls', (req, res) => res.json(listRolls(db, req.query)));
-  r.get('/rolls/:code', (req, res) => res.json(getRollDetail(db, req.params.code)));
-  r.patch('/rolls/:code', (req, res) => res.json({ roll: updateRollInfo(db, req.params.code, req.body || {}) }));
-  r.post('/rolls/:code/adjust', (req, res) => res.json({ roll: adjustRoll(db, req.user, req.params.code, req.body || {}) }));
-  r.post('/rolls/:code/void', requireAdmin, (req, res) => res.json({ roll: voidRoll(db, req.user, req.params.code, req.body || {}) }));
+  r.get('/rolls', asyncHandler(async (req, res) => res.json(await listRolls(db, req.query))));
+  r.get('/rolls/:code', asyncHandler(async (req, res) => res.json(await getRollDetail(db, req.params.code))));
+  r.patch('/rolls/:code', asyncHandler(async (req, res) => res.json({ roll: await updateRollInfo(db, req.params.code, req.body || {}) })));
+  r.post('/rolls/:code/adjust', asyncHandler(async (req, res) => res.json({ roll: await adjustRoll(db, req.user, req.params.code, req.body || {}) })));
+  r.post('/rolls/:code/void', requireAdmin, asyncHandler(async (req, res) => res.json({ roll: await voidRoll(db, req.user, req.params.code, req.body || {}) })));
 
   // Riwayat mutasi
-  r.get('/movements', (req, res) => res.json(listMovements(db, config, req.query)));
+  r.get('/movements', asyncHandler(async (req, res) => res.json(await listMovements(db, config, req.query))));
 
-  r.get('/movements.csv', (req, res) => {
-    const { rows } = listMovements(db, config, { ...req.query, limit: 5000, offset: 0 });
+  r.get('/movements.csv', asyncHandler(async (req, res) => {
+    const { rows } = await listMovements(db, config, { ...req.query, limit: 5000, offset: 0 });
     const head = ['Waktu (UTC)', 'Tipe', 'Dokumen', 'Kode Roll', 'Kain', 'Warna', 'Yard (+/-)', 'Sisa', 'Keperluan', 'Referensi', 'Catatan', 'Petugas'];
     const lines = [head.join(',')];
     for (const m of rows) {
@@ -64,7 +65,7 @@ export function stockRoutes({ db, config }) {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="mutasi-gudang.csv"');
     res.send('﻿' + lines.join('\r\n'));
-  });
+  }));
 
   return r;
 }

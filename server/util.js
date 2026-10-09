@@ -29,11 +29,21 @@ export function reqStr(value, label, max = 200) {
   return s;
 }
 
-export const nowIso = () => new Date().toISOString();
+/** Waktu sekarang sebagai Date (disimpan UTC di kolom DATETIME). */
+export const now = () => new Date();
 
 /** Tanggal lokal (YYYY-MM-DD) dari waktu sekarang dengan offset menit. */
 export function localDate(offsetMinutes, date = new Date()) {
   return new Date(date.getTime() + offsetMinutes * 60000).toISOString().slice(0, 10);
+}
+
+/**
+ * Rentang UTC [mulai, akhir) untuk satu tanggal lokal (YYYY-MM-DD).
+ * Dipakai agar filter harian bisa memakai indeks pada created_at.
+ */
+export function dayRangeUtc(day, offsetMinutes) {
+  const start = new Date(Date.parse(`${day}T00:00:00.000Z`) - offsetMinutes * 60000);
+  return [start, new Date(start.getTime() + 86400000)];
 }
 
 export const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);

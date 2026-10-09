@@ -1,0 +1,22 @@
+# MySQL untuk pengembangan/uji lokal:  docker compose up -d
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: delova_warehouse
+      MYSQL_USER: delova
+      MYSQL_PASSWORD: ganti-password-ini
+      TZ: UTC
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - delova_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-prootpass"]
+      interval: 5s
+      retries: 20
+volumes:
+  delova_mysql:

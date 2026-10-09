@@ -13,16 +13,28 @@ Sistem pergudangan kain roll untuk Delova Wardrobe: pencatatan **barang masuk / 
 
 ## Menjalankan
 
-Butuh Node.js ≥ 22.13 (memakai `node:sqlite` bawaan, tanpa kompilasi native).
+Butuh **Node.js ≥ 22.9** dan **MySQL 8+ (atau MariaDB 10.6+)**. Data disimpan di MySQL.
 
 ```bash
+docker compose up -d      # opsional: MySQL lokal; atau pakai server MySQL Anda sendiri
 npm install
-cp .env.example .env      # opsional; atur ADMIN_PASSWORD
-npm start                 # http://localhost:3000
-npm test                  # tes unit + API
+cp .env.example .env      # isi DB_HOST/DB_USER/DB_PASSWORD/DB_NAME, dan ADMIN_PASSWORD
+npm start                 # http://localhost:3000 (tabel dibuat otomatis saat pertama jalan)
+npm test                  # tes unit + API + konkurensi (butuh MySQL, lihat bawah)
 ```
 
-Login awal: `admin` / password dari `ADMIN_PASSWORD` (bila kosong: `admin123`, dan aplikasi menampilkan peringatan wajib ganti). Data tersimpan di `data/warehouse.db` (SQLite) — **backup file ini secara berkala**.
+Siapkan database & user (jika tidak memakai docker compose):
+
+```sql
+CREATE DATABASE delova_warehouse CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'delova'@'%' IDENTIFIED BY 'password-kuat';
+GRANT ALL ON delova_warehouse.* TO 'delova'@'%';
+```
+
+**Tes** membuat database sementara (`delova_test_*`) lalu menghapusnya, jadi akun tes harus boleh `CREATE/DROP DATABASE`:
+`TEST_DB_HOST`, `TEST_DB_PORT`, `TEST_DB_USER` (default `root`), `TEST_DB_PASSWORD`.
+
+Login awal: `admin` / password dari `ADMIN_PASSWORD` (bila kosong: `admin123`, dan aplikasi menampilkan peringatan wajib ganti). **Backup rutin** dengan `mysqldump --single-transaction -u delova -p delova_warehouse | gzip > backup-$(date +%F).sql.gz` (jadwalkan harian lewat cron).
 
 ## Printer thermal (Admin → Printer & Label)
 
@@ -43,9 +55,9 @@ Pasang di komputer/mini-PC di gudang yang satu jaringan dengan printer (mode jar
 ## Struktur
 
 ```
-server/   Express API, SQLite, layanan inventori, pembuat perintah TSPL/ZPL
+server/   Express API, MySQL (mysql2), layanan inventori, pembuat perintah TSPL/ZPL
 public/   Antarmuka web (tanpa build step), halaman cetak label
 test/     Tes unit & API (node --test)
 ```
 
-Catatan teknis: kode roll ditempel di label dan di-scan sebagai teks Code 128; stok dihitung dari buku mutasi (`movements`) sehingga setiap perubahan yard dapat ditelusuri. Autentikasi memakai sesi cookie `HttpOnly`/`SameSite=Lax`, password di-hash scrypt, dan request pengubah data wajib JSON.
+Catatan teknis: stok dilindungi kunci baris (`SELECT … FOR UPDATE`) sehingga barang keluar yang bersamaan tidak bisa membuat stok minus, dan penomoran kode roll/dokumen memakai penghitung atomik di database (aman dengan banyak pengguna/proses). kode roll ditempel di label dan di-scan sebagai teks Code 128; stok dihitung dari buku mutasi (`movements`) sehingga setiap perubahan yard dapat ditelusuri. Autentikasi memakai sesi cookie `HttpOnly`/`SameSite=Lax`, password di-hash scrypt, dan request pengubah data wajib JSON.

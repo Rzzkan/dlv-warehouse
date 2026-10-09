@@ -9,7 +9,7 @@ import {
 } from '../printing/labels.js';
 import { dispatchPrint, pingNetwork } from '../printing/send.js';
 
-export const loadPrinterConfig = (db) => normalizePrinterConfig(getSetting(db, 'printer', {}), DEFAULT_PRINTER);
+export const loadPrinterConfig = async (db) => normalizePrinterConfig(await getSetting(db, 'printer', {}), DEFAULT_PRINTER);
 
 function parseCodes(input) {
   const raw = Array.isArray(input) ? input : String(input || '').split(',');
@@ -19,12 +19,14 @@ function parseCodes(input) {
   return codes;
 }
 
-function labelsForCodes(db, codes) {
-  return codes.map((code) => {
-    const roll = findRoll(db, code);
+async function labelsForCodes(db, codes) {
+  const labels = [];
+  for (const code of codes) {
+    const roll = await findRoll(db, code);
     if (!roll) throw new HttpError(404, `Roll ${code} tidak ditemukan`);
-    return rollToLabel(roll);
-  });
+    labels.push(rollToLabel(roll));
+  }
+  return labels;
 }
 
 export function printingRoutes({ db }) {
@@ -52,26 +54,26 @@ export function printingRoutes({ db }) {
     res.send(raw.replace('<svg ', `<svg ${size} preserveAspectRatio="none" `));
   });
 
-  r.get('/printer/config', (_req, res) => {
-    res.json({ config: loadPrinterConfig(db), defaults: DEFAULT_PRINTER });
-  });
+  r.get('/printer/config', asyncHandler(async (_req, res) => {
+    res.json({ config: await loadPrinterConfig(db), defaults: DEFAULT_PRINTER });
+  }));
 
   r.put('/printer/config', requireAdmin, asyncHandler(async (req, res) => {
     const cfg = normalizePrinterConfig(req.body || {}, DEFAULT_PRINTER);
-    setSetting(db, 'printer', cfg);
+    await setSetting(db, 'printer', cfg);
     res.json({ config: cfg });
   }));
 
   // Tes koneksi ke printer jaringan (bisa dengan nilai yang belum disimpan)
   r.post('/printer/ping', requireAdmin, asyncHandler(async (req, res) => {
-    const cfg = normalizePrinterConfig({ ...loadPrinterConfig(db), ...(req.body || {}) });
+    const cfg = normalizePrinterConfig({ ...(await loadPrinterConfig(db)), ...(req.body || {}) });
     if (cfg.mode !== 'network') throw bad('Tes koneksi hanya untuk mode printer jaringan');
     res.json(await pingNetwork(cfg));
   }));
 
   // Cetak label tes
   r.post('/printer/test', requireAdmin, asyncHandler(async (req, res) => {
-    const cfg = normalizePrinterConfig({ ...loadPrinterConfig(db), ...(req.body || {}) });
+    const cfg = normalizePrinterConfig({ ...(await loadPrinterConfig(db)), ...(req.body || {}) });
     if (cfg.mode === 'browser') return res.json({ mode: 'browser', url: '/print.html?test=1' });
     await dispatchPrint(cfg, buildPrintData(cfg, [SAMPLE_LABEL], 1));
     res.json({ mode: cfg.mode, sent: 1 });
@@ -79,7 +81,7 @@ export function printingRoutes({ db }) {
 
   // Pratinjau perintah mentah (untuk debugging) berdasarkan konfigurasi di form
   r.post('/printer/preview', requireAdmin, asyncHandler(async (req, res) => {
-    const cfg = normalizePrinterConfig({ ...loadPrinterConfig(db), ...(req.body || {}) });
+    const cfg = normalizePrinterConfig({ ...(await loadPrinterConfig(db)), ...(req.body || {}) });
     const layout = buildLayout(cfg, SAMPLE_LABEL);
     res.json({
       config: cfg,
@@ -91,18 +93,18 @@ export function printingRoutes({ db }) {
 
   // Data label untuk render di browser (halaman print.html)
   r.get('/print/labels-data', asyncHandler(async (req, res) => {
-    const cfg = loadPrinterConfig(db);
-    const labels = req.query.test ? [SAMPLE_LABEL] : labelsForCodes(db, parseCodes(req.query.codes));
+    const cfg = await loadPrinterConfig(db);
+    const labels = req.query.test ? [SAMPLE_LABEL] : await labelsForCodes(db, parseCodes(req.query.codes));
     // `narrow` = lebar bar (dot) yang benar-benar dipakai agar barcode muat di label
     res.json({ config: cfg, labels: labels.map((l) => ({ ...l, narrow: buildLayout(cfg, l).narrow })) });
   }));
 
   // Cetak label: mode jaringan/sistem dikirim dari server; mode browser mengembalikan URL cetak
   r.post('/print/labels', asyncHandler(async (req, res) => {
-    const cfg = loadPrinterConfig(db);
+    const cfg = await loadPrinterConfig(db);
     const codes = parseCodes(req.body?.codes);
     const copies = req.body?.copies ? Math.min(Math.max(Math.round(Number(req.body.copies)), 1), 20) : cfg.copies;
-    const labels = labelsForCodes(db, codes);
+    const labels = await labelsForCodes(db, codes);
     if (cfg.mode === 'browser') {
       return res.json({ mode: 'browser', url: `/print.html?codes=${encodeURIComponent(codes.join(','))}&copies=${copies}` });
     }
@@ -112,8 +114,8 @@ export function printingRoutes({ db }) {
 
   // Unduh file perintah mentah (.prn) untuk dikirim manual ke printer
   r.get('/print/raw', asyncHandler(async (req, res) => {
-    const cfg = loadPrinterConfig(db);
-    const labels = labelsForCodes(db, parseCodes(req.query.codes));
+    const cfg = await loadPrinterConfig(db);
+    const labels = await labelsForCodes(db, parseCodes(req.query.codes));
     res.setHeader('Content-Type', 'text/plain; charset=us-ascii');
     res.setHeader('Content-Disposition', `attachment; filename="label-${cfg.language.toLowerCase()}.prn"`);
     res.send(buildPrintData(cfg, labels));

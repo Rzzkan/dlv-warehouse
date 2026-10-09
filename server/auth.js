@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { HttpError, nowIso } from './util.js';
+import { HttpError, now } from './util.js';
 
 const COOKIE = 'dlv_sid';
 
@@ -19,19 +19,21 @@ export function verifyPassword(password, stored) {
 
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
-export function createSession(db, userId, days) {
+export async function createSession(db, userId, days) {
   const token = crypto.randomBytes(32).toString('hex');
-  const expires = new Date(Date.now() + days * 86400000).toISOString();
-  db.prepare('INSERT INTO sessions(token_hash, user_id, expires_at) VALUES(?,?,?)').run(sha256(token), userId, expires);
+  const expires = new Date(Date.now() + days * 86400000);
+  await db.run('INSERT INTO sessions(token_hash, user_id, expires_at) VALUES(?,?,?)', [sha256(token), userId, expires]);
+  // Bersihkan sesi kedaluwarsa (murah: ada indeks pada expires_at)
+  await db.run('DELETE FROM sessions WHERE expires_at < ?', [now()]);
   return token;
 }
 
-export function destroySession(db, token) {
-  if (token) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(sha256(token));
+export async function destroySession(db, token) {
+  if (token) await db.run('DELETE FROM sessions WHERE token_hash = ?', [sha256(token)]);
 }
 
-export function destroyUserSessions(db, userId) {
-  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+export async function destroyUserSessions(db, userId) {
+  await db.run('DELETE FROM sessions WHERE user_id = ?', [userId]);
 }
 
 export function readCookie(req, name = COOKIE) {
@@ -56,21 +58,24 @@ export function clearSessionCookie(res) {
 
 /** Middleware: isi req.user dari cookie sesi bila valid. */
 export function sessionMiddleware(db) {
-  return (req, _res, next) => {
-    const token = readCookie(req);
-    req.sessionToken = token;
-    req.user = null;
-    if (token) {
-      const row = db
-        .prepare(
+  return async (req, _res, next) => {
+    try {
+      const token = readCookie(req);
+      req.sessionToken = token;
+      req.user = null;
+      if (token) {
+        const row = await db.get(
           `SELECT u.id, u.username, u.name, u.role, u.must_change
              FROM sessions s JOIN users u ON u.id = s.user_id
             WHERE s.token_hash = ? AND s.expires_at > ? AND u.active = 1`,
-        )
-        .get(sha256(token), nowIso());
-      if (row) req.user = { ...row, must_change: !!row.must_change };
+          [sha256(token), now()],
+        );
+        if (row) req.user = { ...row, must_change: !!row.must_change };
+      }
+      next();
+    } catch (err) {
+      next(err);
     }
-    next();
   };
 }
 
@@ -107,14 +112,15 @@ export function createLoginLimiter({ max = 8, windowMs = 5 * 60 * 1000 } = {}) {
 }
 
 /** Buat admin awal bila belum ada user. Mengembalikan info bila memakai password bawaan. */
-export function bootstrapAdmin(db, config) {
-  const count = db.prepare('SELECT COUNT(*) c FROM users').get().c;
-  if (count > 0) return null;
+export async function bootstrapAdmin(db, config) {
+  const { c } = await db.get('SELECT COUNT(*) c FROM users');
+  if (c > 0) return null;
   const password = config.adminPassword || 'admin123';
   const defaulted = !config.adminPassword;
-  db.prepare(
+  await db.run(
     `INSERT INTO users(username, name, role, password_hash, must_change, active, created_at)
      VALUES(?, ?, 'admin', ?, ?, 1, ?)`,
-  ).run(config.adminUsername, 'Administrator', hashPassword(password), defaulted ? 1 : 0, nowIso());
+    [config.adminUsername, 'Administrator', hashPassword(password), defaulted ? 1 : 0, now()],
+  );
   return { username: config.adminUsername, defaulted };
 }
