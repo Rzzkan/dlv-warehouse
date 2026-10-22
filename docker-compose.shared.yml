@@ -1,0 +1,58 @@
+# MODE BERBAGI VPS: dipakai bila VPS sudah menjalankan web server lain (mis. ecommerce delova.id) di port 80/443.
+# Tidak ada Caddy di sini. Aplikasi hanya mendengarkan di 127.0.0.1:${APP_PORT:-3100}; web server yang sudah ada
+# (Nginx/Caddy/CloudPanel/dll.) meneruskan wh.delova.id ke port itu. MySQL terpisah (container sendiri), TIDAK menyentuh database ecommerce.
+#   Jalankan lewat: ./scripts/setup-vps.sh --shared      (menulis COMPOSE_FILE=docker-compose.shared.yml ke .env)
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?isi DB_ROOT_PASSWORD di .env}
+      MYSQL_DATABASE: ${DB_NAME:-delova_warehouse}
+      MYSQL_USER: ${DB_USER:-delova}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?isi DB_PASSWORD di .env}
+      TZ: UTC
+    # Dibuat hemat memori agar tidak mengganggu ecommerce di VPS yang sama (±250-350 MB)
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max_allowed_packet=16M
+      - --innodb-buffer-pool-size=128M
+      - --performance_schema=OFF
+      - --max_connections=60
+    mem_limit: 512m
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    mem_limit: 384m
+    ports:
+      - "127.0.0.1:${APP_PORT:-3100}:3000"   # hanya bisa diakses dari server ini (oleh reverse proxy)
+    environment:
+      PORT: "3000"
+      HOST: 0.0.0.0
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_USER: ${DB_USER:-delova}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-delova_warehouse}
+      DB_AUTO_CREATE: "0"
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      TZ_OFFSET_MINUTES: ${TZ_OFFSET_MINUTES:-420}
+      COOKIE_SECURE: "1"
+      TRUST_PROXY: "loopback, uniquelocal"   # reverse proxy di host / jaringan Docker
+      SESSION_DAYS: ${SESSION_DAYS:-14}
+
+volumes:
+  mysql_data:

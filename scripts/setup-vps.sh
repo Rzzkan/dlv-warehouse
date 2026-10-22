@@ -1,28 +1,53 @@
 #!/usr/bin/env bash
 # Deploy sekali jalan di VPS (Ubuntu + Docker). Jalankan dari folder repo:
-#   ./scripts/setup-vps.sh [domain]          # default: wh.delova.id
+#   ./scripts/setup-vps.sh [domain]            VPS KHUSUS (Caddy + HTTPS otomatis, memakai port 80/443)
+#   ./scripts/setup-vps.sh --shared [domain]   VPS BERBAGI: sudah ada web server/ecommerce di port 80/443.
+#                                              Aplikasi hanya di 127.0.0.1:APP_PORT; Anda tambahkan 1 vhost di web server yang ada.
+# Tanpa --shared, skrip otomatis menolak bila port 80/443 sudah dipakai (agar situs lain tidak terganggu).
 # Aman dijalankan ulang: .env yang sudah ada tidak ditimpa.
-# Variabel opsional: ADMIN_PASSWORD=...  ASSUME_YES=1 (tanpa pertanyaan)
+# Variabel opsional: ADMIN_PASSWORD=...  APP_PORT=3100  ASSUME_YES=1 (tanpa pertanyaan)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-DOMAIN="${1:-${APP_DOMAIN:-wh.delova.id}}"
-COMPOSE=(docker compose -f docker-compose.prod.yml)
+SHARED=0
+args=()
+for a in "$@"; do case "$a" in --shared) SHARED=1;; *) args+=("$a");; esac; done
+DOMAIN="${args[0]:-${APP_DOMAIN:-wh.delova.id}}"
+APP_PORT="${APP_PORT:-3100}"
+if [ "$SHARED" = 1 ]; then COMPOSE_FILE_NAME=docker-compose.shared.yml; else COMPOSE_FILE_NAME=docker-compose.prod.yml; fi
+export COMPOSE_FILE="$COMPOSE_FILE_NAME"
+COMPOSE=(docker compose)
+
 say()  { printf '\n\033[1;32m==> %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;33m!  %s\033[0m\n' "$*"; }
 die()  { printf '\033[1;31mX  %s\033[0m\n' "$*" >&2; exit 1; }
 ask()  { [ "${ASSUME_YES:-0}" = 1 ] && return 0; read -r -p "$1 [y/N] " a; [[ "$a" =~ ^[yY]$ ]]; }
+port_used() { ss -ltn 2>/dev/null | awk -v p=":$1\$" '$4 ~ p {f=1} END{exit !f}'; }
 
-say "1/6 Memeriksa Docker"
+say "1/6 Memeriksa Docker & port"
 command -v docker >/dev/null || die "Docker belum terpasang."
 docker compose version >/dev/null 2>&1 || die "Plugin Docker Compose tidak ditemukan."
 docker info >/dev/null 2>&1 || die "Tidak bisa mengakses Docker. Jalankan sebagai user di grup 'docker' (atau pakai sudo)."
-[ -f docker-compose.prod.yml ] || die "Jalankan skrip ini dari dalam folder repo dlv-warehouse."
+[ -f "$COMPOSE_FILE_NAME" ] || die "Jalankan skrip ini dari dalam folder repo dlv-warehouse."
+if [ "$SHARED" = 0 ]; then
+  if port_used 80 || port_used 443; then
+    warn "Port 80/443 di server ini SUDAH dipakai (kemungkinan ecommerce/web server lain)."
+    warn "Mode standar akan bentrok. Pakai mode berbagi:  ./scripts/setup-vps.sh --shared $DOMAIN"
+    warn "Lihat siapa yang memakainya:  sudo ss -ltnp | grep -E ':(80|443) '"
+    die "Dibatalkan (tidak ada yang diubah)."
+  fi
+else
+  if ! docker ps --format '{{.Names}}' | grep -q "^$(basename "$PWD")-app-1\$" && port_used "$APP_PORT"; then
+    die "Port $APP_PORT sudah dipakai proses lain. Pilih port lain:  APP_PORT=3110 ./scripts/setup-vps.sh --shared $DOMAIN"
+  fi
+fi
 
 say "2/6 Menyiapkan .env"
 generated=""
 if [ -f .env ]; then
   echo ".env sudah ada: dipakai apa adanya."
+  grep -q '^COMPOSE_FILE=' .env || echo "COMPOSE_FILE=$COMPOSE_FILE_NAME" >> .env
+  if [ "$SHARED" = 1 ]; then APP_PORT="$(grep -E '^APP_PORT=' .env | head -1 | cut -d= -f2- || true)"; APP_PORT="${APP_PORT:-3100}"; fi
 else
   admin_pw="${ADMIN_PASSWORD:-}"
   if [ -z "$admin_pw" ]; then
@@ -33,7 +58,9 @@ else
   case "$admin_pw" in *[\$\"\'\`\ \#\\]*) die "Password admin tidak boleh berisi spasi atau karakter \$ \" ' \` # \\ (merusak file .env).";; esac
   umask 077
   cat > .env <<ENV
+COMPOSE_FILE=$COMPOSE_FILE_NAME
 APP_DOMAIN=$DOMAIN
+APP_PORT=$APP_PORT
 DB_ROOT_PASSWORD=$(openssl rand -hex 24)
 DB_USER=delova
 DB_PASSWORD=$(openssl rand -hex 24)
@@ -74,16 +101,20 @@ if [ "$st" != healthy ]; then
   die "Aplikasi belum sehat (status: $st). Lihat log di atas."
 fi
 echo "Aplikasi sehat."
-echo "Menunggu HTTPS https://$DOMAIN (sertifikat bisa butuh sampai 2 menit)..."
-ok=""
-for _ in $(seq 1 40); do
-  if curl -fsS --max-time 5 "https://$DOMAIN/api/health" >/dev/null 2>&1; then ok=1; break; fi
-  sleep 3
-done
-if [ -z "$ok" ]; then
-  warn "HTTPS belum bisa diakses. Biasanya DNS belum aktif / port 80+443 tertutup. Log Caddy:"
-  "${COMPOSE[@]}" logs --tail 15 caddy || true
-  warn "Setelah DNS benar: ${COMPOSE[*]} restart caddy"
+if [ "$SHARED" = 1 ]; then
+  curl -fsS --max-time 5 "http://127.0.0.1:$APP_PORT/api/health" >/dev/null 2>&1 && echo "Terjangkau di http://127.0.0.1:$APP_PORT (khusus server ini)." || warn "Port $APP_PORT belum menjawab."
+else
+  echo "Menunggu HTTPS https://$DOMAIN (sertifikat bisa butuh sampai 2 menit)..."
+  ok=""
+  for _ in $(seq 1 40); do
+    if curl -fsS --max-time 5 "https://$DOMAIN/api/health" >/dev/null 2>&1; then ok=1; break; fi
+    sleep 3
+  done
+  if [ -z "$ok" ]; then
+    warn "HTTPS belum bisa diakses. Biasanya DNS belum aktif / port 80+443 tertutup. Log Caddy:"
+    "${COMPOSE[@]}" logs --tail 15 caddy || true
+    warn "Setelah DNS benar: docker compose restart caddy"
+  fi
 fi
 
 say "6/6 Backup harian"
@@ -97,9 +128,14 @@ else
 fi
 
 say "SELESAI"
-echo "Alamat   : https://$DOMAIN"
+if [ "$SHARED" = 1 ]; then
+  echo "Aplikasi hidup di 127.0.0.1:$APP_PORT. LANGKAH TERAKHIR (manual): tambahkan 1 vhost di web server yang sudah ada,"
+  echo "yang meneruskan https://$DOMAIN -> http://127.0.0.1:$APP_PORT  (contoh: deploy/nginx-shared.conf, deploy/Caddyfile.shared, atau CloudPanel -> Reverse Proxy)."
+  echo "Cek setelah itu:  curl -I https://$DOMAIN/api/health"
+else
+  echo "Alamat   : https://$DOMAIN"
+fi
 echo "Login    : admin"
 if [ -n "$generated" ]; then echo "Password : $admin_pw   <-- CATAT SEKARANG, tidak ditampilkan lagi"; else echo "Password : sesuai yang Anda isi (ADMIN_PASSWORD di .env)"; fi
 echo "Langkah berikut: login -> ganti password admin -> buat akun staf -> isi Jenis Kain."
-echo "Status   : ${COMPOSE[*]} ps"
-echo "Log      : ${COMPOSE[*]} logs -f app"
+echo "Status   : docker compose ps        Log: docker compose logs -f app"

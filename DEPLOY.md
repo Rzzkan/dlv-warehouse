@@ -1,11 +1,17 @@
 # Tahapan Deployment ke VPS dengan Docker (wh.delova.id)
 
-Panduan langkah demi langkah, ditulis untuk **VPS Hostinger (Ubuntu 24.04 + Docker)**. Berlaku juga untuk VPS lain dengan Ubuntu/Debian.
+Panduan langkah demi langkah, ditulis untuk **VPS Hostinger (Ubuntu 24.04 + Docker)**. Berlaku juga untuk VPS lain dengan Ubuntu/Debian. **Bila VPS sudah berisi ecommerce, baca bagian "VPS yang sudah ada ecommerce" dulu.**
 Hasil akhir: aplikasi jalan di **https://wh.delova.id** dengan HTTPS otomatis, database MySQL internal, dan backup harian.
 
 > Perintah bertanda `# di server` dijalankan lewat SSH di VPS. Ganti tulisan `GANTI-...` dengan nilai Anda.
 
-## Cara cepat (terminal, ±10 menit)
+> ## ⚠ VPS yang sudah berisi ecommerce delova.id → pakai **MODE BERBAGI**
+> Port 80/443 di VPS itu sudah dipakai web server ecommerce, jadi paket standar (dengan Caddy sendiri) akan **bentrok**.
+> Di mode berbagi, aplikasi gudang hanya mendengarkan di `127.0.0.1:3100` dan MySQL-nya container terpisah
+> (tidak menyentuh database ecommerce). Anda cukup menambah **satu vhost** `wh.delova.id` di web server yang sudah ada.
+> Langkah lengkapnya ada di bagian **"Deploy di VPS yang sudah ada ecommerce"** di bawah. Tahap 2 (update server, user, firewall) **dilewati**.
+
+## Cara cepat — VPS BARU/kosong (terminal, ±10 menit)
 
 Prasyarat: VPS Ubuntu 24.04 + Docker, dan record DNS `A` **`wh` → IP VPS** sudah dibuat (lihat Tahap 1).
 
@@ -31,6 +37,60 @@ git clone https://github.com/Rzzkan/dlv-warehouse.git && cd dlv-warehouse
 Skrip `setup-vps.sh` akan: memeriksa Docker → membuat `.env` (password database acak, Anda diminta password admin awal) → memeriksa DNS → build & jalankan → menunggu aplikasi sehat dan HTTPS aktif → memasang backup harian. Aman dijalankan ulang (`.env` tidak ditimpa). Setelah selesai, lanjut ke **Tahap 5** (verifikasi & ganti password admin).
 
 > Repo privat? Lihat catatan *deploy key* di Tahap 3 sebelum `git clone`.
+
+---
+
+## Deploy di VPS yang sudah ada ecommerce (mode berbagi)
+
+**Aturan main supaya ecommerce tidak terganggu:** jangan jalankan `apt upgrade`, `ufw enable/reset`, atau `docker system prune`; jangan ubah DNS `delova.id`/`www` (hanya **tambah** record `wh`); jangan menyentuh database ecommerce.
+
+**A. Persiapan (hanya membaca / aman)**
+
+```bash
+ssh USER@IP-VPS                                   # user yang biasa Anda pakai di VPS ini
+sudo ss -ltnp | grep -E ':(80|443) '              # siapa web server-nya? nginx / caddy / apache / docker-proxy
+docker --version; docker compose version          # sudah ada Docker?
+docker ps --format '{{.Names}}\t{{.Ports}}'       # ecommerce berjalan di Docker atau langsung di server?
+free -h; df -h /                                  # butuh ±1 GB RAM bebas & ±5 GB disk
+```
+
+- Buat **snapshot VPS** di hPanel dulu (jaring pengaman).
+- Belum ada Docker? Pasang dari panduan resmi Docker (`get.docker.com`) pada jam sepi. Pemasangan Docker mengubah aturan iptables; umumnya aman, tetapi itu alasan snapshot di atas penting. Bila tidak ingin menambah Docker di server produksi, pakai jalur **"Tanpa Docker"** di README (systemd + vhost, memakai MySQL yang ada dengan database & user terpisah).
+- DNS: tambahkan record `A` **`wh` → IP VPS** saja.
+
+**B. Jalankan aplikasi**
+
+```bash
+git clone https://github.com/Rzzkan/dlv-warehouse.git && cd dlv-warehouse
+./scripts/setup-vps.sh --shared wh.delova.id      # port bentrok? APP_PORT=3110 ./scripts/setup-vps.sh --shared wh.delova.id
+```
+
+Skrip menolak jalan bila ada bentrok port, tidak memakai port 80/443, dan menulis `COMPOSE_FILE=docker-compose.shared.yml` ke `.env`.
+**Di mode berbagi cukup `docker compose ...` tanpa `-f`** (contoh: `docker compose ps`, `docker compose logs -f app`, `docker compose up -d --build`).
+RAM dibatasi: MySQL 512 MB, aplikasi 384 MB (praktisnya memakai jauh lebih kecil).
+
+**C. Tambah vhost di web server yang sudah ada** (pilih satu sesuai hasil `ss` di atas)
+
+| Web server Anda | Caranya |
+|---|---|
+| **Nginx** | Salin `deploy/nginx-shared.conf` ke `sites-available`, aktifkan, `nginx -t && reload`, lalu `sudo certbot --nginx -d wh.delova.id` |
+| **Caddy** | Tambahkan blok dari `deploy/Caddyfile.shared` ke Caddyfile lama, lalu reload Caddy (sertifikat otomatis) |
+| **CloudPanel** (template Hostinger) | *Add Site → Reverse Proxy*; domain `wh.delova.id`, URL `http://127.0.0.1:3100`; lalu terbitkan Let's Encrypt di tab SSL/TLS (nama menu bisa sedikit beda antar versi) |
+| **Apache** | VirtualHost `wh.delova.id` dengan `ProxyPass / http://127.0.0.1:3100/` + `ProxyPassReverse` + `RequestHeader set X-Forwarded-Proto https` + `RequestHeader set X-Forwarded-For` bila belum otomatis, lalu certbot |
+| Web server **di dalam Docker** (Nginx Proxy Manager, Traefik, Coolify) | `127.0.0.1` dari dalam container itu bukan host. Perlu penyambungan jaringan Docker — beri tahu jenisnya, konfigurasinya saya sesuaikan |
+| Cloudflare di depan | SSL/TLS mode **Full (strict)**; pastikan vhost sudah memiliki sertifikat |
+
+**D. Verifikasi**
+
+```bash
+curl -I https://wh.delova.id/api/health           # HTTP/2 200
+curl -I https://delova.id                         # situs ecommerce tetap normal (cek juga di browser)
+```
+
+Lalu lanjut ke **Tahap 5** (login, ganti password admin, akun staf), **Tahap 6**, dan **Tahap 7** (backup).
+Cookie login aplikasi ini bernama `dlv_sid` dan hanya berlaku untuk `wh.delova.id` (tidak dibagi ke `delova.id`), jadi tidak bentrok dengan sesi ecommerce.
+
+**Batalkan / hapus total bila perlu** (tidak menyentuh ecommerce): `docker compose down` (data tetap) — atau `docker compose down -v` untuk menghapus juga data gudang (**tidak bisa dikembalikan**; backup dulu). Hapus vhost `wh.delova.id` di web server.
 
 ---
 
@@ -67,7 +127,7 @@ nslookup wh.delova.id        # harus menampilkan IP VPS
 
 **Jangan lanjut ke Tahap 4 sebelum DNS benar** — kalau tidak, sertifikat HTTPS gagal dibuat. (Bila DNS-nya di Cloudflare: awalnya set ke **DNS only** (awan abu-abu); setelah jalan, boleh dihidupkan proxy dengan SSL mode **Full (strict)**.)
 
-## Tahap 2 — Masuk & amankan server
+## Tahap 2 — Masuk & amankan server *(hanya VPS BARU/kosong — lewati bila VPS sudah berisi ecommerce)*
 
 ```bash
 ssh root@IP-VPS                          # di komputer Anda
@@ -195,7 +255,7 @@ docker compose -f docker-compose.prod.yml logs --tail 30 app
 | App log: "Gagal terhubung ke MySQL" | Password di `.env` berubah setelah database terbentuk | MySQL hanya memakai password saat **pertama kali** dibuat. Kembalikan password lama, atau ubah di MySQL (`ALTER USER`). |
 | Login terkunci "Terlalu banyak percobaan" | 8× salah dalam 5 menit | Tunggu 5 menit, atau `docker compose -f docker-compose.prod.yml restart app` |
 | Kamera tidak terbuka di HP | Membuka lewat `http://` / IP | Pakai `https://wh.delova.id` |
-| Disk penuh | Backup/log/image lama menumpuk | `df -h`, `docker system prune -f`, hapus backup lama |
+| Disk penuh | Backup/log/image lama menumpuk | `df -h`, `docker image prune -f` (aman), hapus backup lama. **Jangan** `docker system prune` di VPS yang juga berisi ecommerce |
 | Setelah reboot VPS aplikasi mati | Docker tidak otomatis hidup | `sudo systemctl enable docker` (container sudah `restart: unless-stopped`) |
 
 Perintah berguna:

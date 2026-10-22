@@ -1,0 +1,11 @@
+# Mode berbagi VPS — bila web server yang sudah ada adalah CADDY, TAMBAHKAN blok ini ke Caddyfile-nya
+# (jangan ganti isi yang lama), lalu:  sudo systemctl reload caddy   (atau: docker exec <caddy> caddy reload --config /etc/caddy/Caddyfile)
+# Sertifikat HTTPS untuk wh.delova.id dibuat otomatis. Sesuaikan port 3100 bila APP_PORT berbeda.
+wh.delova.id {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3100
+	header Strict-Transport-Security "max-age=31536000"
+	request_body {
+		max_size 5MB
+	}
+}

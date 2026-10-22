@@ -52,7 +52,7 @@ Bahasa printer: **TSPL** (TSC, Xprinter, Gprinter, Argox, dll.) atau **ZPL** (Ze
 
 ## Deployment (wh.delova.id)
 
-> Panduan lengkap bertahap (Hostinger VPS + Docker): **[DEPLOY.md](DEPLOY.md)**.
+> Panduan lengkap bertahap (Hostinger VPS + Docker): **[DEPLOY.md](DEPLOY.md)**. VPS yang sudah berisi ecommerce? Pakai **mode berbagi**: `./scripts/setup-vps.sh --shared`.
 
 Paket produksi: aplikasi + MySQL + Caddy (HTTPS otomatis dari Let's Encrypt), semuanya lewat Docker. MySQL tidak dibuka ke internet.
 
