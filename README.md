@@ -52,6 +52,8 @@ Bahasa printer: **TSPL** (TSC, Xprinter, Gprinter, Argox, dll.) atau **ZPL** (Ze
 
 ## Deployment (wh.delova.id)
 
+> Panduan lengkap bertahap (Hostinger VPS + Docker): **[DEPLOY.md](DEPLOY.md)**.
+
 Paket produksi: aplikasi + MySQL + Caddy (HTTPS otomatis dari Let's Encrypt), semuanya lewat Docker. MySQL tidak dibuka ke internet.
 
 **Kebutuhan:** VPS Linux (1 vCPU / 1–2 GB RAM cukup) dengan Docker + Docker Compose, port 80 & 443 terbuka.
