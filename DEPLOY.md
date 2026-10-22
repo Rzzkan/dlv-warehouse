@@ -5,6 +5,35 @@ Hasil akhir: aplikasi jalan di **https://wh.delova.id** dengan HTTPS otomatis, d
 
 > Perintah bertanda `# di server` dijalankan lewat SSH di VPS. Ganti tulisan `GANTI-...` dengan nilai Anda.
 
+## Cara cepat (terminal, ±10 menit)
+
+Prasyarat: VPS Ubuntu 24.04 + Docker, dan record DNS `A` **`wh` → IP VPS** sudah dibuat (lihat Tahap 1).
+
+```bash
+# 1) dari komputer Anda
+ssh root@IP-VPS
+
+# 2) di server: update + user deploy + firewall (satu blok, salin semua)
+apt update && apt -y upgrade
+adduser --disabled-password --gecos "" deploy && usermod -aG sudo,docker deploy
+echo "deploy ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/deploy
+mkdir -p /home/deploy/.ssh && cp ~/.ssh/authorized_keys /home/deploy/.ssh/ 2>/dev/null
+chown -R deploy:deploy /home/deploy/.ssh && chmod 700 /home/deploy/.ssh
+ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable
+exit
+
+# 3) masuk lagi sebagai deploy, ambil kode, jalankan skrip deploy
+ssh deploy@IP-VPS
+git clone https://github.com/Rzzkan/dlv-warehouse.git && cd dlv-warehouse
+./scripts/setup-vps.sh wh.delova.id
+```
+
+Skrip `setup-vps.sh` akan: memeriksa Docker → membuat `.env` (password database acak, Anda diminta password admin awal) → memeriksa DNS → build & jalankan → menunggu aplikasi sehat dan HTTPS aktif → memasang backup harian. Aman dijalankan ulang (`.env` tidak ditimpa). Setelah selesai, lanjut ke **Tahap 5** (verifikasi & ganti password admin).
+
+> Repo privat? Lihat catatan *deploy key* di Tahap 3 sebelum `git clone`.
+
+---
+
 ## Gambaran
 
 ```
