@@ -182,11 +182,13 @@ chmod 600 .env
 
 ## Tahap 4 — Build & jalankan
 
+> Perintah `docker compose` di panduan ini tanpa `-f` karena file compose dibaca dari `COMPOSE_FILE` di `.env` (standalone: `docker-compose.prod.yml`, berbagi VPS: `docker-compose.shared.yml`). Jalankan dari folder `dlv-warehouse`.
+
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml ps          # db: healthy, app: running/healthy, caddy: running
-docker compose -f docker-compose.prod.yml logs -f app # tunggu "Delova Warehouse berjalan di ..." lalu Ctrl+C
-docker compose -f docker-compose.prod.yml logs caddy | tail -20   # cari "certificate obtained"
+docker compose up -d --build
+docker compose ps          # db: healthy, app: running/healthy, caddy: running
+docker compose logs -f app # tunggu "Delova Warehouse berjalan di ..." lalu Ctrl+C
+docker compose logs caddy | tail -20   # cari "certificate obtained"
 ```
 
 Build pertama memakan 1–3 menit. Tabel database dibuat otomatis saat aplikasi pertama jalan.
@@ -206,7 +208,7 @@ Lalu di HP/komputer:
 - [ ] Tes kamera: buka **Barang Masuk** di HP → tombol 📷 harus membuka kamera.
 
 Setelah login berhasil, `ADMIN_PASSWORD` di `.env` tidak dipakai lagi (hanya untuk database kosong). Boleh dikosongkan:
-`sed -i 's|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=|' .env && docker compose -f docker-compose.prod.yml up -d`.
+`sed -i 's|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=|' .env && docker compose up -d`.
 
 ## Tahap 6 — Isi data awal & atur printer
 
@@ -238,11 +240,11 @@ crontab -e                                  # tambahkan baris di bawah
 cd ~/dlv-warehouse
 ./scripts/backup.sh                         # selalu backup dulu
 git pull
-docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml logs --tail 30 app
+docker compose up -d --build
+docker compose logs --tail 30 app
 ```
 
-**Rollback** bila ada masalah: `git log --oneline` → `git checkout <commit-lama>` → `docker compose -f docker-compose.prod.yml up -d --build`. Bila perubahan melibatkan struktur database, rilis akan menyertakan catatan migrasi; sebelum itu selalu backup.
+**Rollback** bila ada masalah: `git log --oneline` → `git checkout <commit-lama>` → `docker compose up -d --build`. Bila perubahan melibatkan struktur database, rilis akan menyertakan catatan migrasi; sebelum itu selalu backup.
 
 ---
 
@@ -250,10 +252,10 @@ docker compose -f docker-compose.prod.yml logs --tail 30 app
 
 | Gejala | Penyebab umum | Solusi |
 |---|---|---|
-| Browser: "tidak aman" / sertifikat gagal | DNS belum mengarah ke VPS, atau port 80/443 tertutup | Cek `nslookup wh.delova.id`, firewall `ufw status` & hPanel; lalu `docker compose -f docker-compose.prod.yml restart caddy` |
-| `502 Bad Gateway` | Container `app` mati/belum siap | `docker compose -f docker-compose.prod.yml logs app` |
+| Browser: "tidak aman" / sertifikat gagal | DNS belum mengarah ke VPS, atau port 80/443 tertutup | Cek `nslookup wh.delova.id`, firewall `ufw status` & hPanel; lalu `docker compose restart caddy` |
+| `502 Bad Gateway` | Container `app` mati/belum siap | `docker compose logs app` |
 | App log: "Gagal terhubung ke MySQL" | Password di `.env` berubah setelah database terbentuk | MySQL hanya memakai password saat **pertama kali** dibuat. Kembalikan password lama, atau ubah di MySQL (`ALTER USER`). |
-| Login terkunci "Terlalu banyak percobaan" | 8× salah dalam 5 menit | Tunggu 5 menit, atau `docker compose -f docker-compose.prod.yml restart app` |
+| Login terkunci "Terlalu banyak percobaan" | 8× salah dalam 5 menit | Tunggu 5 menit, atau `docker compose restart app` |
 | Kamera tidak terbuka di HP | Membuka lewat `http://` / IP | Pakai `https://wh.delova.id` |
 | Disk penuh | Backup/log/image lama menumpuk | `df -h`, `docker image prune -f` (aman), hapus backup lama. **Jangan** `docker system prune` di VPS yang juga berisi ecommerce |
 | Setelah reboot VPS aplikasi mati | Docker tidak otomatis hidup | `sudo systemctl enable docker` (container sudah `restart: unless-stopped`) |
@@ -261,10 +263,10 @@ docker compose -f docker-compose.prod.yml logs --tail 30 app
 Perintah berguna:
 
 ```bash
-docker compose -f docker-compose.prod.yml ps            # status
-docker compose -f docker-compose.prod.yml logs -f app   # log aplikasi
-docker compose -f docker-compose.prod.yml restart app   # restart aplikasi
-docker compose -f docker-compose.prod.yml down          # matikan (data tetap aman di volume)
+docker compose ps            # status
+docker compose logs -f app   # log aplikasi
+docker compose restart app   # restart aplikasi
+docker compose down          # matikan (data tetap aman di volume)
 # JANGAN pakai "down -v": itu menghapus volume database!
 ```
 
