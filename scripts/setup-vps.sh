@@ -3,6 +3,8 @@
 #   ./scripts/setup-vps.sh [domain]            VPS KHUSUS (Caddy + HTTPS otomatis, memakai port 80/443)
 #   ./scripts/setup-vps.sh --shared [domain]   VPS BERBAGI: sudah ada web server/ecommerce di port 80/443.
 #                                              Aplikasi hanya di 127.0.0.1:APP_PORT; Anda tambahkan 1 vhost di web server yang ada.
+#   ./scripts/setup-vps.sh --shared --proxy-net delova_default [domain]
+#                                              Sama, dan app ikut jaringan Docker proxy yang ada (bila proxy-nya berjalan di Docker).
 # Tanpa --shared, skrip otomatis menolak bila port 80/443 sudah dipakai (agar situs lain tidak terganggu).
 # Aman dijalankan ulang: .env yang sudah ada tidak ditimpa.
 # Variabel opsional: ADMIN_PASSWORD=...  APP_PORT=3100  ASSUME_YES=1 (tanpa pertanyaan)
@@ -10,11 +12,21 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 SHARED=0
+PROXY_NET=""
 args=()
-for a in "$@"; do case "$a" in --shared) SHARED=1;; *) args+=("$a");; esac; done
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --shared) SHARED=1;;
+    --proxy-net) PROXY_NET="${2:-}"; [ -n "$PROXY_NET" ] || { echo "X  --proxy-net butuh nama jaringan (lihat: docker network ls)" >&2; exit 1; }; shift;;
+    *) args+=("$1");;
+  esac
+  shift
+done
+[ -z "$PROXY_NET" ] || SHARED=1
 DOMAIN="${args[0]:-${APP_DOMAIN:-wh.delova.id}}"
 APP_PORT="${APP_PORT:-3100}"
 if [ "$SHARED" = 1 ]; then COMPOSE_FILE_NAME=docker-compose.shared.yml; else COMPOSE_FILE_NAME=docker-compose.prod.yml; fi
+[ -z "$PROXY_NET" ] || COMPOSE_FILE_NAME="$COMPOSE_FILE_NAME:docker-compose.shared-net.yml"
 export COMPOSE_FILE="$COMPOSE_FILE_NAME"
 COMPOSE=(docker compose)
 
@@ -28,7 +40,11 @@ say "1/6 Memeriksa Docker & port"
 command -v docker >/dev/null || die "Docker belum terpasang."
 docker compose version >/dev/null 2>&1 || die "Plugin Docker Compose tidak ditemukan."
 docker info >/dev/null 2>&1 || die "Tidak bisa mengakses Docker. Jalankan sebagai user di grup 'docker' (atau pakai sudo)."
-[ -f "$COMPOSE_FILE_NAME" ] || die "Jalankan skrip ini dari dalam folder repo dlv-warehouse."
+[ -f "${COMPOSE_FILE_NAME%%:*}" ] || die "Jalankan skrip ini dari dalam folder repo dlv-warehouse."
+if [ -n "$PROXY_NET" ]; then
+  docker network inspect "$PROXY_NET" >/dev/null 2>&1 || die "Jaringan Docker '$PROXY_NET' tidak ditemukan. Lihat daftar: docker network ls"
+  export PROXY_NETWORK="$PROXY_NET"
+fi
 if [ "$SHARED" = 0 ]; then
   if port_used 80 || port_used 443; then
     warn "Port 80/443 di server ini SUDAH dipakai (kemungkinan ecommerce/web server lain)."
@@ -46,7 +62,12 @@ say "2/6 Menyiapkan .env"
 generated=""
 if [ -f .env ]; then
   echo ".env sudah ada: dipakai apa adanya."
-  grep -q '^COMPOSE_FILE=' .env || echo "COMPOSE_FILE=$COMPOSE_FILE_NAME" >> .env
+  if grep -q '^COMPOSE_FILE=' .env; then
+    [ -z "$PROXY_NET" ] || grep -q 'shared-net' .env || sed -i "s|^COMPOSE_FILE=.*|COMPOSE_FILE=$COMPOSE_FILE_NAME|" .env
+  else
+    echo "COMPOSE_FILE=$COMPOSE_FILE_NAME" >> .env
+  fi
+  [ -z "$PROXY_NET" ] || grep -q '^PROXY_NETWORK=' .env || echo "PROXY_NETWORK=$PROXY_NET" >> .env
   if [ "$SHARED" = 1 ]; then APP_PORT="$(grep -E '^APP_PORT=' .env | head -1 | cut -d= -f2- || true)"; APP_PORT="${APP_PORT:-3100}"; fi
 else
   admin_pw="${ADMIN_PASSWORD:-}"
@@ -61,6 +82,7 @@ else
 COMPOSE_FILE=$COMPOSE_FILE_NAME
 APP_DOMAIN=$DOMAIN
 APP_PORT=$APP_PORT
+${PROXY_NET:+PROXY_NETWORK=$PROXY_NET}
 DB_ROOT_PASSWORD=$(openssl rand -hex 24)
 DB_USER=delova
 DB_PASSWORD=$(openssl rand -hex 24)
@@ -128,7 +150,10 @@ else
 fi
 
 say "SELESAI"
-if [ "$SHARED" = 1 ]; then
+if [ -n "$PROXY_NET" ]; then
+  echo "Aplikasi hidup dan ikut jaringan Docker '$PROXY_NET' (alamat internal: dlv-warehouse:3000)."
+  echo "LANGKAH TERAKHIR: tambahkan vhost $DOMAIN di Caddy yang ada:  ./scripts/add-caddy-vhost.sh"
+elif [ "$SHARED" = 1 ]; then
   echo "Aplikasi hidup di 127.0.0.1:$APP_PORT. LANGKAH TERAKHIR (manual): tambahkan 1 vhost di web server yang sudah ada,"
   echo "yang meneruskan https://$DOMAIN -> http://127.0.0.1:$APP_PORT  (contoh: deploy/nginx-shared.conf, deploy/Caddyfile.shared, atau CloudPanel -> Reverse Proxy)."
   echo "Cek setelah itu:  curl -I https://$DOMAIN/api/health"

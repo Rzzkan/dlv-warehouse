@@ -77,8 +77,29 @@ RAM dibatasi: MySQL 512 MB, aplikasi 384 MB (praktisnya memakai jauh lebih kecil
 | **Caddy** | Tambahkan blok dari `deploy/Caddyfile.shared` ke Caddyfile lama, lalu reload Caddy (sertifikat otomatis) |
 | **CloudPanel** (template Hostinger) | *Add Site → Reverse Proxy*; domain `wh.delova.id`, URL `http://127.0.0.1:3100`; lalu terbitkan Let's Encrypt di tab SSL/TLS (nama menu bisa sedikit beda antar versi) |
 | **Apache** | VirtualHost `wh.delova.id` dengan `ProxyPass / http://127.0.0.1:3100/` + `ProxyPassReverse` + `RequestHeader set X-Forwarded-Proto https` + `RequestHeader set X-Forwarded-For` bila belum otomatis, lalu certbot |
-| Web server **di dalam Docker** (Nginx Proxy Manager, Traefik, Coolify) | `127.0.0.1` dari dalam container itu bukan host. Perlu penyambungan jaringan Docker — beri tahu jenisnya, konfigurasinya saya sesuaikan |
+| **Caddy di dalam Docker** (stack ecommerce `delova`) | Jalur khusus di bawah: `setup-vps.sh --shared --proxy-net <jaringan>` lalu `add-caddy-vhost.sh` |
+| Web server lain **di dalam Docker** (Nginx Proxy Manager, Traefik, Coolify) | `127.0.0.1` dari dalam container itu bukan host; gunakan `--proxy-net` agar app ikut jaringan proxy, lalu arahkan vhost ke `dlv-warehouse:3000` |
 | Cloudflare di depan | SSL/TLS mode **Full (strict)**; pastikan vhost sudah memiliki sertifikat |
+
+### Jalur khusus: Caddy yang berjalan di Docker (stack ecommerce `delova`)
+
+Ciri-cirinya: `sudo ss -ltnp` menunjukkan `docker-proxy` di port 80/443 dan `docker ps` menampilkan container `caddy`.
+
+```bash
+docker network ls                                  # catat jaringan stack ecommerce, mis. delova_default
+git clone https://github.com/Rzzkan/dlv-warehouse.git && cd dlv-warehouse
+./scripts/setup-vps.sh --shared --proxy-net delova_default wh.delova.id   # app ikut jaringan itu (alias: dlv-warehouse)
+./scripts/add-caddy-vhost.sh                       # tambah blok wh.delova.id ke Caddy yang ada
+curl -I https://wh.delova.id/api/health            # 200
+curl -I https://delova.id                          # ecommerce tetap normal
+```
+
+`add-caddy-vhost.sh` bekerja dengan pengaman: mencari file Caddyfile lewat mount container → **backup** (`Caddyfile.bak-<waktu>`) → **menambah** blok di akhir file (isi lama tidak diubah) → `caddy validate` → `caddy reload` (tanpa downtime) → **rollback otomatis** bila validasi/reload gagal. Skrip berhenti tanpa mengubah apa pun bila Caddyfile tidak berasal dari file di server atau container Caddy tidak tunggal.
+
+Hal yang perlu diketahui:
+- Hanya container `app` gudang yang bergabung ke jaringan ecommerce; **MySQL gudang tetap terpisah** dan tidak terjangkau dari ecommerce.
+- Jika stack ecommerce di-`docker compose down`, Docker akan memberi pesan bahwa jaringan masih dipakai (container gudang). Itu hanya peringatan; jaringan dipakai ulang saat `up`.
+- Batalkan: `cat Caddyfile.bak-<waktu> > <Caddyfile> && docker exec <caddy> caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile`, lalu `docker compose down` di folder `dlv-warehouse`.
 
 **D. Verifikasi**
 

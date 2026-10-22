@@ -1,0 +1,14 @@
+# Tambahan untuk MODE BERBAGI bila reverse proxy yang sudah ada berjalan DI DALAM Docker (mis. Caddy stack ecommerce).
+# Hanya container `app` yang ikut ke jaringan proxy tersebut (alias "dlv-warehouse"); MySQL gudang TETAP terisolasi.
+# Dipakai otomatis oleh: ./scripts/setup-vps.sh --shared --proxy-net NAMA_JARINGAN
+services:
+  app:
+    networks:
+      default: {}
+      proxy:
+        aliases:
+          - dlv-warehouse
+networks:
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:?isi PROXY_NETWORK di .env}
